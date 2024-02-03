@@ -1,11 +1,11 @@
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
+import java.io.FileInputStream;
 import java.util.Map;
 import java.io.InputStreamReader;
 
@@ -13,7 +13,7 @@ public class Server {
     private static final int DEFAULT_PORT = 8080;
 
     public static void main(String[] args) throws Exception {
-        try (ServerSocket serverSocket = new ServerSocket(DEFAULT_PORT)){
+        try (ServerSocket serverSocket = new ServerSocket(DEFAULT_PORT)) {
             System.out.println("Server is listening on port " + DEFAULT_PORT);
 
             while (true) {
@@ -28,7 +28,7 @@ public class Server {
 
     private static class ClientHandler extends Thread {
         private Socket clientSocket;
-        
+
         public ClientHandler(Socket clientSocket) {
             this.clientSocket = clientSocket;
         }
@@ -50,12 +50,8 @@ public class Server {
                     case "POST":
                         handlePostRequest(httpRequest, out, in);
                         break;
-                    // case "HEAD":
-                    //     handleHeadRequest(httpRequest, out);
-                    //     break;
-                    // case "TRACE":
-                    //     handleTraceRequest(httpRequest, out, in);
-                    //     break;
+                    // Add cases for other HTTP methods if needed
+                    // ...
                     // default:
                     //     sendErrorResponse(501, "Not Implemented", out);
                 }
@@ -71,17 +67,7 @@ public class Server {
                 httpRequest.getPath();
             }
 
-            // if (httpRequest.getPath().equals("/favicon.ico")) {
-            //     sendFaviconResponse(httpRequest, out);
-            //     return;
-            // }
-
             String filePath = "C:\\Users\\tommi\\Documents\\University\\Y3S1\\Networks\\Final Project\\Rootdir" + httpRequest.getPath();
-
-            // if (!isPathWithinRoot(filePath)) {
-            //     sendErrorResponse(403, "Forbidden", out);
-            //     return;
-            // }
 
             File file = new File(filePath);
 
@@ -92,66 +78,12 @@ public class Server {
             }
         }
 
-        private void sendOkResponse(HTTPRequest httpRequest, PrintWriter out, File file) throws IOException {
-            out.println("HTTP/1.1 200 OK");
-            out.println("Content-Length: " + file.length());
-            out.println("Content-Type: " + getContentType(file));
-            out.println();
-            sendFileContent(out, file);
-        }
-
-        // private boolean shouldUseChunkedEncoding(HTTPRequest httpRequest) {
-        //     String chunkedHeader = httpRequest.getHeaders().get("chunked");
-        //     return "yes".equalsIgnoreCase(chunkedHeader);
-        // }
-
-        private void sendErrorResponse(int statusCode, String statusMessage, PrintWriter out) {
-            out.println("HTTP/1.1 " + statusCode + " " + statusMessage);
-            out.println();
-        }
-
-        private boolean isPathWithinRoot(String filePath) throws IOException {
-            String canonicalFilePath = new File(filePath).getCanonicalPath();
-            String canonicalRoot = new File("C:\\Users\\tommi\\Documents\\University\\Y3S1\\Networks\\Final Project\\Rootdir").getCanonicalPath();
-            return canonicalFilePath.startsWith(canonicalRoot);
-        }
-
-        private String getContentType(File file) {
-            // Implement logic to determine content type based on file extension
-            // For simplicity, this example assumes everything is treated as text/html
-            return "text/html";
-        }
-
-        private void sendFileContent(PrintWriter out, File file) throws IOException {
-            try (BufferedReader fileReader = new BufferedReader(new FileReader(file))) {
-                char[] buffer = new char[1024];
-                int bytesRead;
-                while ((bytesRead = fileReader.read(buffer)) != -1) {
-                    out.print(buffer);
-                }
-            }
-        }
-
-        private void sendFileContentChunked(PrintWriter out, File file) throws IOException {
-            try (BufferedReader fileReader = new BufferedReader(new FileReader(file))) {
-                char[] buffer = new char[1024];
-                int bytesRead;
-                while ((bytesRead = fileReader.read(buffer)) != -1) {
-                    out.println(Integer.toHexString(bytesRead));
-                    out.print(buffer);
-                    out.println();
-                }
-                out.println("0");
-                out.println();
-            }
-        }
-
         private void handlePostRequest(HTTPRequest httpRequest, PrintWriter out, BufferedReader in) throws IOException {
             // Check if the requested page is /params_info.html
             if ("/params_info.html".equals(httpRequest.getPath())) {
                 // Parse parameters from the POST request
-                java.util.Map<String, String> params = httpRequest.getParameters();
-        
+                Map<String, String> params = httpRequest.getParameters();
+
                 // Generate the HTML page with details about submitted parameters
                 StringBuilder response = new StringBuilder();
                 response.append("<html><body>");
@@ -162,7 +94,7 @@ public class Server {
                 }
                 response.append("</ul>");
                 response.append("</body></html>");
-        
+
                 // Send the HTML response
                 sendResponse(200, "OK", "text/html", response.toString(), out);
             } else {
@@ -171,26 +103,54 @@ public class Server {
             }
         }
 
+        private void sendOkResponse(HTTPRequest httpRequest, PrintWriter out, File file) throws IOException {
+            sendResponse(200, "OK", getContentType(file), file, out);
+        }
+
+        private void sendErrorResponse(int statusCode, String statusMessage, PrintWriter out) {
+            sendResponse(statusCode, statusMessage, "text/plain", "", out);
+        }
+
         private void sendResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
-            // Send a complete HTTP response
-            sendResponseHeaders(statusCode, statusMessage, contentType, content, out);
+            out.println("HTTP/1.1 " + statusCode + " " + statusMessage);
+            out.println("Content-Type: " + contentType);
+            out.println("Content-Length: " + content.length());
+            out.println();
             out.println(content);
         }
-    
-        private void sendResponseHeaders(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
-            // Send HTTP response headers
-            out.println("HTTP/1.1 " + statusCode + " " + statusMessage);
-            out.println("content-type: " + contentType);
-            out.println("content-length: " + content.length());
-            out.println("");
+
+        private void sendResponse(int statusCode, String statusMessage, String contentType, File file, PrintWriter out) throws IOException {
+            try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
+                out.println("HTTP/1.1 " + statusCode + " " + statusMessage);
+                out.println("Content-Type: " + contentType);
+                out.println("Content-Length: " + file.length());
+                out.println();
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = fileStream.read(buffer)) != -1) {
+                    clientSocket.getOutputStream().write(buffer, 0, bytesRead);
+                }
+            }
         }
 
-        private void respondToRequest() throws IOException {
-            String httpRes = "HTTP/1.1 200 OK\r\n\r\nYou just connected to the server!";
+        private String getContentType(File file) {
+            // Implement logic to determine content type based on file extension
+            String fileName = file.getName();
+            String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
 
-            try (OutputStream outputStream = clientSocket.getOutputStream();
-                 PrintWriter writer = new PrintWriter(outputStream, true)) {
-                writer.println(httpRes);
+            switch (extension) {
+                case "html":
+                    return "text/html";
+                case "jpg":
+                    return "image/jpg";
+                case "png":
+                    return "image/png";
+                case "gif":
+                    return "image/gif";
+                case "bmp":
+                    return "image/bmp";
+                default:
+                    return "application/octet-stream";
             }
         }
     }
