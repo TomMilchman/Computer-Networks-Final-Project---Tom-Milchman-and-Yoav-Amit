@@ -29,6 +29,7 @@ public class HTTPRequest {
                 path = fullPath.substring(0, queryIndex);
                 String queryString = fullPath.substring(queryIndex + 1);
                 parameters = parseParameters(queryString);
+                System.out.println("POST request parameters: "+parameters.toString());
             } else {
                 path = fullPath;
             }
@@ -49,14 +50,6 @@ public class HTTPRequest {
             } else if (line.startsWith("User-Agent:")) {
                 userAgent = line.substring("User-Agent:".length()).trim();
             }
-        }
-
-        if ("POST".equals(method) && contentLength > 0) {
-            StringBuilder requestBody = new StringBuilder();
-            char[] buffer = new char[contentLength];
-            in.read(buffer, 0, contentLength);
-            requestBody.append(buffer);
-            parameters = parseParameters(requestBody.toString());
         }
     }
 

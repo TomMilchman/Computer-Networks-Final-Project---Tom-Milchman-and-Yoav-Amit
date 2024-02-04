@@ -106,8 +106,8 @@ public class Server {
                         break;
                     // Add cases for other HTTP methods if needed
                     // ...
-                    // default:
-                    //     sendErrorResponse(501, "Not Implemented", out);
+                    default:
+                        sendErrorResponse(501, "Not Implemented", out);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -124,13 +124,12 @@ public class Server {
                 String filePath = root + httpRequest.getPath();
                 System.out.println("file path: "+filePath);
                 if (!isPathWithinRoot(filePath)) {
-                    System.out.println("hopa hey");
                     sendErrorResponse(403, "Forbidden", out);
                     return;
                 }
 
                 File file = new File(filePath);
-                System.out.println(getContentType(file));
+
                 if (file.exists() && !file.isDirectory()) {
                     sendResponse(200, "OK", getContentType(file), file, out);
                 } else if (getContentType(file) == "application/octet-stream") {
@@ -165,8 +164,11 @@ public class Server {
                 // Send the HTML response
                 sendResponse(200, "OK", "text/html", response.toString(), out);
             } else {
-                // Handle other POST requests as needed
-                // ...
+                handleGetRequest(httpRequest, out);
+                if (httpRequest.getContentLength() > 0) {
+                    Map<String, String> params = httpRequest.getParameters();
+                    System.out.println("Received POST parameters: " + params.toString());
+                }
             }
         }
 
