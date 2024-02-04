@@ -6,23 +6,77 @@ import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileReader;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.io.InputStreamReader;
 
 public class Server {
-    private static final int DEFAULT_PORT = 8080;
+    private static int port;
+    private static int maxThreads;
+    private static String root;
+    private static String defaultPage;
 
     public static void main(String[] args) throws Exception {
-        try (ServerSocket serverSocket = new ServerSocket(DEFAULT_PORT)) {
-            System.out.println("Server is listening on port " + DEFAULT_PORT);
+        startServer();
+    }
 
-            while (true) {
-                Socket clientSocket = serverSocket.accept();
-                Thread clientThread = new ClientHandler(clientSocket);
-                clientThread.start();
+    private static void startServer() {
+        try {
+            loadConfig("config.ini");
+            System.out.println("Successfully loaded config.ini: port: "+port+" "+
+            "max threads: "+maxThreads+" root: "+root+" default page:"+defaultPage);
+            
+            ExecutorService threadPool = Executors.newFixedThreadPool(maxThreads);
+        
+            try (ServerSocket serverSocket = new ServerSocket(port)) {
+                System.out.println("Server is listening on port " + port);
+
+                while (true) {
+                    Socket clientSocket = serverSocket.accept();
+                    Runnable clientHandler = new ClientHandler(clientSocket);
+                    
+                    // Submit the client handler to the thread pool
+                    threadPool.submit(clientHandler);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                // Shutdown the thread pool when the server is done
+                threadPool.shutdown();
             }
         } catch (Exception e) {
             e.printStackTrace();
+           //TODO: Handle server shutdown 
+        }
+    }
+
+    private static void loadConfig(String configFile) throws IOException {
+        try (BufferedReader reader = new BufferedReader(new FileReader(configFile))) {
+            String line;
+
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split("=");
+                if (parts.length == 2) {
+                    String key = parts[0].trim();
+                    String value = parts[1].trim();
+                    switch (key) {
+                        case "port":
+                            port = Integer.parseInt(value);
+                            break;
+                        case "root":
+                            root = value;
+                            break;
+                        case "defaultPage":
+                            defaultPage = value;
+                            break;
+                        case "maxThreads":
+                            maxThreads = Integer.parseInt(value);
+                            break;
+                    }
+                }
+            }
         }
     }
 
@@ -55,7 +109,6 @@ public class Server {
                     // default:
                     //     sendErrorResponse(501, "Not Implemented", out);
                 }
-
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -67,11 +120,15 @@ public class Server {
                 httpRequest.getPath();
             }
 
-            String filePath = "C:\\Users\\tommi\\Documents\\University\\Y3S1\\Networks\\Final Project\\Rootdir" + httpRequest.getPath();
+            String filePath = root + httpRequest.getPath();
 
             File file = new File(filePath);
 
             if (file.exists() && !file.isDirectory()) {
+                sendResponse(200, "OK", getContentType(file), file, out);
+            } else if (getContentType(file) == "application/octet-stream") {
+                //No page is requested, respond with default page
+                System.out.println(file.getPath());
                 sendResponse(200, "OK", getContentType(file), file, out);
             } else {
                 sendErrorResponse(404, "Not Found", out);
