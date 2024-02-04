@@ -24,7 +24,7 @@ public class Server {
 
     private static void startServer() {
         try {
-            loadConfig("config.ini");
+            loadConfig("Computer Networks Final Project - Tom Milchman and Yoav Amit/config.ini");
             System.out.println("Successfully loaded config.ini: port: "+port+" "+
             "max threads: "+maxThreads+" root: "+root+" default page:"+defaultPage);
             
@@ -115,23 +115,33 @@ public class Server {
         }
 
         private void handleGetRequest(HTTPRequest httpRequest, PrintWriter out) throws IOException {
-            int queryIndex = httpRequest.getPath().indexOf('?');
-            if (queryIndex != -1) {
-                httpRequest.getPath();
-            }
+            try {
+                int queryIndex = httpRequest.getPath().indexOf('?');
+                if (queryIndex != -1) {
+                    httpRequest.getPath();
+                }
 
-            String filePath = root + httpRequest.getPath();
+                String filePath = root + httpRequest.getPath();
+                System.out.println("file path: "+filePath);
+                if (!isPathWithinRoot(filePath)) {
+                    System.out.println("hopa hey");
+                    sendErrorResponse(403, "Forbidden", out);
+                    return;
+                }
 
-            File file = new File(filePath);
-
-            if (file.exists() && !file.isDirectory()) {
-                sendResponse(200, "OK", getContentType(file), file, out);
-            } else if (getContentType(file) == "application/octet-stream") {
-                //No page is requested, respond with default page
-                System.out.println(file.getPath());
-                sendResponse(200, "OK", getContentType(file), file, out);
-            } else {
-                sendErrorResponse(404, "Not Found", out);
+                File file = new File(filePath);
+                System.out.println(getContentType(file));
+                if (file.exists() && !file.isDirectory()) {
+                    sendResponse(200, "OK", getContentType(file), file, out);
+                } else if (getContentType(file) == "application/octet-stream") {
+                    //No page is requested, respond with default page
+                    file = new File(root + "\\" + defaultPage);
+                    sendResponse(200, "OK", getContentType(file), file, out);
+                } else {
+                    sendErrorResponse(404, "Not Found", out);
+                }
+            } catch (Exception e) {
+                e.getStackTrace();
             }
         }
 
@@ -165,10 +175,12 @@ public class Server {
         }
 
         private void sendResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
-            out.println("HTTP/1.1 " + statusCode + " " + statusMessage);
-            out.println("Content-Type: " + contentType);
-            out.println("Content-Length: " + content.length());
-            out.println();
+            String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
+            String contentTypeStr = "Content-Type: " + contentType;
+            String contentLengthStr = "Content-Length: " + content.length();
+            
+            out.println(headerStr +"\r\n"+ contentTypeStr +"\r\n"+ contentLengthStr +"\r\n");
+            System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
             out.println(content);
         }
 
@@ -178,7 +190,7 @@ public class Server {
                 String contentTypeStr = "Content-Type: " + contentType;
                 String contentLengthStr = "Content-Length: " + file.length();
                 
-                out.println(headerStr +"\n"+ contentTypeStr +"\n"+ contentLengthStr +"\n");
+                out.println(headerStr +"\r\n"+ contentTypeStr +"\r\n"+ contentLengthStr +"\r\n");
                 System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
                 byte[] buffer = new byte[1024];
                 int bytesRead;
@@ -205,9 +217,17 @@ public class Server {
                     return "image/gif";
                 case "bmp":
                     return "image/bmp";
+                case "ico":
+                    return "image/x-icon";
                 default:
                     return "application/octet-stream";
             }
+        }
+
+        private boolean isPathWithinRoot(String filePath) throws IOException {
+            String canonicalFilePath = new File(filePath).getCanonicalPath();
+            String canonicalRoot = new File(root).getCanonicalPath();
+            return canonicalFilePath.startsWith(canonicalRoot);
         }
     }
 }
