@@ -7,6 +7,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
+import java.io.OutputStream;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -122,7 +123,7 @@ public class Server {
                 }
 
                 String filePath = root + httpRequest.getPath();
-                System.out.println("file path: "+filePath);
+
                 if (!isPathWithinRoot(filePath)) {
                     sendErrorResponse(403, "Forbidden", out);
                     return;
@@ -131,11 +132,20 @@ public class Server {
                 File file = new File(filePath);
 
                 if (file.exists() && !file.isDirectory()) {
-                    sendResponse(200, "OK", getContentType(file), file, out);
-                } else if (getContentType(file) == "application/octet-stream") {
-                    //No page is requested, respond with default page
+                    if (httpRequest.isUseChunked()) {
+                        sendChunkedResponse(200, "OK", getContentType(file), file, clientSocket.getOutputStream());
+                    } else {
+                        sendResponse(200, "OK", getContentType(file), file, out);
+                    }
+                } else if (getContentType(file).equals("application/octet-stream")) {
+                    // No page is requested, respond with the default page
                     file = new File(root + "\\" + defaultPage);
-                    sendResponse(200, "OK", getContentType(file), file, out);
+
+                    if (httpRequest.isUseChunked()) {
+                        sendChunkedResponse(200, "OK", getContentType(file), file, clientSocket.getOutputStream());
+                    } else {
+                        sendResponse(200, "OK", getContentType(file), file, out);
+                    }
                 } else {
                     sendErrorResponse(404, "Not Found", out);
                 }
@@ -143,6 +153,7 @@ public class Server {
                 e.getStackTrace();
             }
         }
+
 
         private void handlePostRequest(HTTPRequest httpRequest, PrintWriter out, BufferedReader in) throws IOException {
             // Check if the requested page is /params_info.html
@@ -165,10 +176,6 @@ public class Server {
                 sendResponse(200, "OK", "text/html", response.toString(), out);
             } else {
                 handleGetRequest(httpRequest, out);
-                if (httpRequest.getContentLength() > 0) {
-                    Map<String, String> params = httpRequest.getParameters();
-                    System.out.println("Received POST parameters: " + params.toString());
-                }
             }
         }
 
@@ -200,6 +207,40 @@ public class Server {
                 while ((bytesRead = fileStream.read(buffer)) != -1) {
                     clientSocket.getOutputStream().write(buffer, 0, bytesRead);
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void sendChunkedResponse(int statusCode, String statusMessage, String contentType, File file, OutputStream outputStream) throws IOException {
+            try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
+                String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
+                String contentTypeStr = "Content-Type: " + contentType;
+        
+                // Send the response headers
+                String responseHeaders = headerStr + "\r\nTransfer-Encoding: chunked\r\n" + contentTypeStr + "\r\n\r\n";
+                outputStream.write(responseHeaders.getBytes());
+                System.out.println("Sent response: " + headerStr + " Transfer-Encoding: chunked " + contentTypeStr);
+        
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+        
+                while ((bytesRead = fileStream.read(buffer)) != -1) {
+                    // Write the chunk size in hexadecimal followed by CRLF
+                    String chunkHeader = Integer.toHexString(bytesRead) + "\r\n";
+                    outputStream.write(chunkHeader.getBytes());
+        
+                    // Write the actual chunk
+                    outputStream.write(buffer, 0, bytesRead);
+        
+                    // Write CRLF after each chunk
+                    outputStream.write("\r\n".getBytes());
+                }
+        
+                // Write the final chunk of size 0 to signal the end
+                outputStream.write("0\r\n\r\n".getBytes());
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
 

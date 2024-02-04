@@ -10,6 +10,7 @@ public class HTTPRequest {
     private int contentLength;
     private String referer;
     private String userAgent;
+    private boolean useChunked;
     private Map<String, String> parameters;
 
     public HTTPRequest(String requestLine, BufferedReader in) throws IOException {
@@ -29,7 +30,7 @@ public class HTTPRequest {
                 path = fullPath.substring(0, queryIndex);
                 String queryString = fullPath.substring(queryIndex + 1);
                 parameters = parseParameters(queryString);
-                System.out.println("POST request parameters: "+parameters.toString());
+                System.out.println("Received parameters: "+parameters.toString());
             } else {
                 path = fullPath;
             }
@@ -41,7 +42,6 @@ public class HTTPRequest {
     private void parseHeaders(BufferedReader in) throws IOException {
         parameters = new HashMap<>();
         String line;
-
         while ((line = in.readLine()) != null && !line.isEmpty()) {
             if (line.startsWith("Content-Length:")) {
                 contentLength = Integer.parseInt(line.substring("Content-Length:".length()).trim());
@@ -49,10 +49,21 @@ public class HTTPRequest {
                 referer = line.substring("Referer:".length()).trim();
             } else if (line.startsWith("User-Agent:")) {
                 userAgent = line.substring("User-Agent:".length()).trim();
-            }
+            } else if (line.startsWith("Transfer-Encoding: chunked")) {
+                useChunked = true;
+            } 
+        }
+    
+        
+        if ("POST".equals(method) && contentLength > 0) {
+            StringBuilder requestBody = new StringBuilder();
+            char[] buffer = new char[contentLength];
+            in.read(buffer, 0, contentLength);
+            requestBody.append(buffer);
+            parameters = parseParameters(requestBody.toString());
         }
     }
-
+    
     private boolean isImagePathImage(String path) {
         String[] imageExtensions = {".jpg", ".bmp", ".gif", ".png"};
 
@@ -105,5 +116,9 @@ public class HTTPRequest {
 
     public Map<String, String> getParameters() {
         return parameters;
+    }
+
+    public boolean isUseChunked() {
+        return useChunked;
     }
 }
