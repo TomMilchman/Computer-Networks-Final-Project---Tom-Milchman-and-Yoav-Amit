@@ -19,10 +19,20 @@ public class HTTPRequest {
 
     private void parseRequestLine(String requestLine) {
         String[] requestParts = requestLine.split(" ");
-
+    
         if (requestParts.length == 3) {
             method = requestParts[0];
-            path = requestParts[1];
+            String fullPath = requestParts[1];
+            
+            int queryIndex = fullPath.indexOf('?');
+            if (queryIndex != -1) {
+                path = fullPath.substring(0, queryIndex);
+                String queryString = fullPath.substring(queryIndex + 1);
+                parameters = parseParameters(queryString);
+            } else {
+                path = fullPath;
+            }
+    
             isImage = isImagePathImage(path);
         }
     }

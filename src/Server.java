@@ -72,7 +72,7 @@ public class Server {
             File file = new File(filePath);
 
             if (file.exists() && !file.isDirectory()) {
-                sendOkResponse(httpRequest, out, file);
+                sendResponse(200, "OK", getContentType(file), file, out);
             } else {
                 sendErrorResponse(404, "Not Found", out);
             }
@@ -103,10 +103,6 @@ public class Server {
             }
         }
 
-        private void sendOkResponse(HTTPRequest httpRequest, PrintWriter out, File file) throws IOException {
-            sendResponse(200, "OK", getContentType(file), file, out);
-        }
-
         private void sendErrorResponse(int statusCode, String statusMessage, PrintWriter out) {
             sendResponse(statusCode, statusMessage, "text/plain", "", out);
         }
@@ -121,12 +117,15 @@ public class Server {
 
         private void sendResponse(int statusCode, String statusMessage, String contentType, File file, PrintWriter out) throws IOException {
             try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
-                out.println("HTTP/1.1 " + statusCode + " " + statusMessage);
-                out.println("Content-Type: " + contentType);
-                out.println("Content-Length: " + file.length());
-                out.println();
+                String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
+                String contentTypeStr = "Content-Type: " + contentType;
+                String contentLengthStr = "Content-Length: " + file.length();
+                
+                out.println(headerStr +"\n"+ contentTypeStr +"\n"+ contentLengthStr +"\n");
+                System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
                 byte[] buffer = new byte[1024];
                 int bytesRead;
+
                 while ((bytesRead = fileStream.read(buffer)) != -1) {
                     clientSocket.getOutputStream().write(buffer, 0, bytesRead);
                 }
