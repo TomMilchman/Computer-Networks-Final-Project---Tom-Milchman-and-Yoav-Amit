@@ -54,7 +54,7 @@ public class HTTPRequest {
             } 
         }
     
-        
+        //This is so that the form parameters can be displayed
         if ("POST".equals(method) && contentLength > 0) {
             StringBuilder requestBody = new StringBuilder();
             char[] buffer = new char[contentLength];

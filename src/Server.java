@@ -100,13 +100,15 @@ public class Server {
 
                 switch (httpRequest.getMethod()) {
                     case "GET":
-                        handleGetRequest(httpRequest, out);
+                        handleGetHeadRequest(true, httpRequest, out);
                         break;
                     case "POST":
                         handlePostRequest(httpRequest, out, in);
                         break;
-                    // Add cases for other HTTP methods if needed
-                    // ...
+                    case "HEAD":
+                        handleGetHeadRequest(false, httpRequest, out);
+                        break;
+                    // TODO: Trace
                     default:
                         sendErrorResponse(501, "Not Implemented", out);
                 }
@@ -115,13 +117,8 @@ public class Server {
             }
         }
 
-        private void handleGetRequest(HTTPRequest httpRequest, PrintWriter out) throws IOException {
+        private void handleGetHeadRequest(boolean isGET, HTTPRequest httpRequest, PrintWriter out) throws IOException {
             try {
-                int queryIndex = httpRequest.getPath().indexOf('?');
-                if (queryIndex != -1) {
-                    httpRequest.getPath();
-                }
-
                 String filePath = root + httpRequest.getPath();
 
                 if (!isPathWithinRoot(filePath)) {
@@ -132,10 +129,14 @@ public class Server {
                 File file = new File(filePath);
 
                 if (file.exists() && !file.isDirectory()) {
-                    if (httpRequest.isUseChunked()) {
-                        sendChunkedResponse(200, "OK", getContentType(file), file, clientSocket.getOutputStream());
+                    if (isGET) {
+                        if (httpRequest.isUseChunked()) {
+                            sendChunkedResponse(200, "OK", getContentType(file), file, clientSocket.getOutputStream());
+                        } else {
+                            sendResponse(200, "OK", getContentType(file), file, out);
+                        } 
                     } else {
-                        sendResponse(200, "OK", getContentType(file), file, out);
+                        printHeaders(200, "OK", getContentType(file), (int)file.length(), out);
                     }
                 } else if (getContentType(file).equals("application/octet-stream")) {
                     // No page is requested, respond with the default page
@@ -175,7 +176,7 @@ public class Server {
                 // Send the HTML response
                 sendResponse(200, "OK", "text/html", response.toString(), out);
             } else {
-                handleGetRequest(httpRequest, out);
+                handleGetHeadRequest(true, httpRequest, out);
             }
         }
 
@@ -183,24 +184,23 @@ public class Server {
             sendResponse(statusCode, statusMessage, "text/plain", "", out);
         }
 
-        private void sendResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
+        private void printHeaders(int statusCode, String statusMessage, String contentType, int contentLength, PrintWriter out) {
             String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
             String contentTypeStr = "Content-Type: " + contentType;
-            String contentLengthStr = "Content-Length: " + content.length();
-            
+            String contentLengthStr = "Content-Length: " + contentLength;
+
             out.println(headerStr +"\r\n"+ contentTypeStr +"\r\n"+ contentLengthStr +"\r\n");
             System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
+        }
+        
+        private void sendResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
+            printHeaders(statusCode, statusMessage, contentType, content.length(), out);
             out.println(content);
         }
 
         private void sendResponse(int statusCode, String statusMessage, String contentType, File file, PrintWriter out) throws IOException {
             try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
-                String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
-                String contentTypeStr = "Content-Type: " + contentType;
-                String contentLengthStr = "Content-Length: " + file.length();
-                
-                out.println(headerStr +"\r\n"+ contentTypeStr +"\r\n"+ contentLengthStr +"\r\n");
-                System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
+                printHeaders(statusCode, statusMessage, contentType, (int)file.length(), out);
                 byte[] buffer = new byte[1024];
                 int bytesRead;
 
