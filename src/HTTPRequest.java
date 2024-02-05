@@ -14,33 +14,32 @@ public class HTTPRequest {
     private Map<String, String> parameters;
 
     public HTTPRequest(String requestLine, BufferedReader in) throws IOException {
+        parameters = new HashMap<>();
         parseRequestLine(requestLine);
         parseHeaders(in);
     }
 
     private void parseRequestLine(String requestLine) {
         String[] requestParts = requestLine.split(" ");
-    
+
         if (requestParts.length == 3) {
             method = requestParts[0];
             String fullPath = requestParts[1];
-            
+
             int queryIndex = fullPath.indexOf('?');
             if (queryIndex != -1) {
                 path = fullPath.substring(0, queryIndex);
                 String queryString = fullPath.substring(queryIndex + 1);
-                parameters.putAll(parseParameters(queryString));
-                System.out.println("Received parameters: "+parameters.toString());
+                parseParameters(queryString);
             } else {
                 path = fullPath;
             }
-    
+
             isImage = isImagePathImage(path);
         }
     }
 
     private void parseHeaders(BufferedReader in) throws IOException {
-        parameters = new HashMap<>();
         String line;
         while ((line = in.readLine()) != null && !line.isEmpty()) {
             if (line.startsWith("Content-Length:")) {
@@ -51,19 +50,19 @@ public class HTTPRequest {
                 userAgent = line.substring("User-Agent:".length()).trim();
             } else if (line.startsWith("Transfer-Encoding: chunked")) {
                 useChunked = true;
-            } 
+            }
         }
-    
-        //POST request's content body parameters
+
+        // POST request's content body parameters
         if ("POST".equals(method) && contentLength > 0) {
             StringBuilder requestBody = new StringBuilder();
             char[] buffer = new char[contentLength];
             in.read(buffer, 0, contentLength);
             requestBody.append(buffer);
-            parameters.putAll(parseParameters(requestBody.toString()));
+            parseParameters(requestBody.toString());
         }
     }
-    
+
     private boolean isImagePathImage(String path) {
         String[] imageExtensions = {".jpg", ".bmp", ".gif", ".png"};
 
@@ -76,18 +75,17 @@ public class HTTPRequest {
         return false;
     }
 
-    private Map<String, String> parseParameters(String requestBody) {
-        Map<String, String> params = new HashMap<>();
+    private void parseParameters(String requestBody) {
         String[] paramPairs = requestBody.split("&");
 
         for (String pair : paramPairs) {
             String[] keyValue = pair.split("=");
             if (keyValue.length == 2) {
-                params.put(keyValue[0], keyValue[1]);
+                parameters.put(keyValue[0], keyValue[1]);
             }
         }
-        
-        return params;
+
+        System.out.println("Received parameters: " + parameters.toString());
     }
 
     public String getMethod() {

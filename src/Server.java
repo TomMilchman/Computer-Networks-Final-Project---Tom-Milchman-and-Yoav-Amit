@@ -128,7 +128,7 @@ public class Server {
 
                 File file = new File(filePath);
 
-                if (getContentType(file) == null) {
+                if (file.exists() && file.isDirectory()) {
                     // Request default page
                     file = new File(filePath + "\\" + defaultPage);
                 }
@@ -245,14 +245,7 @@ public class Server {
         private String getContentType(File file) {
             // Logic to determine content type based on file extension.
             String fileName = file.getName();
-            String extension = "";
-            int dotIndex = fileName.lastIndexOf('.');
-
-            if (dotIndex != -1) {
-                extension = fileName.substring(dotIndex + 1).toLowerCase();
-            } else {
-                return null;
-            }
+            String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
 
             switch (extension) {
                 case "html":
