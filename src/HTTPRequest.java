@@ -29,7 +29,7 @@ public class HTTPRequest {
             if (queryIndex != -1) {
                 path = fullPath.substring(0, queryIndex);
                 String queryString = fullPath.substring(queryIndex + 1);
-                parameters = parseParameters(queryString);
+                parameters.putAll(parseParameters(queryString));
                 System.out.println("Received parameters: "+parameters.toString());
             } else {
                 path = fullPath;
@@ -54,13 +54,13 @@ public class HTTPRequest {
             } 
         }
     
-        //This is so that the form parameters can be displayed
+        //POST request's content body parameters
         if ("POST".equals(method) && contentLength > 0) {
             StringBuilder requestBody = new StringBuilder();
             char[] buffer = new char[contentLength];
             in.read(buffer, 0, contentLength);
             requestBody.append(buffer);
-            parameters = parseParameters(requestBody.toString());
+            parameters.putAll(parseParameters(requestBody.toString()));
         }
     }
     

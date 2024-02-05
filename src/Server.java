@@ -91,7 +91,7 @@ public class Server {
         @Override
         public void run() {
             try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                 PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
+                PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
 
                 String requestLine = in.readLine();
                 System.out.println("Received request: " + requestLine);
@@ -128,24 +128,22 @@ public class Server {
 
                 File file = new File(filePath);
 
+                if (getContentType(file) == null) {
+                    // Request default page
+                    file = new File(filePath + "\\" + defaultPage);
+                }
+
                 if (file.exists() && !file.isDirectory()) {
                     if (isGET) {
+                        //GET request
                         if (httpRequest.isUseChunked()) {
                             sendChunkedResponse(200, "OK", getContentType(file), file, clientSocket.getOutputStream());
                         } else {
                             sendResponse(200, "OK", getContentType(file), file, out);
                         } 
                     } else {
-                        printHeaders(200, "OK", getContentType(file), (int)file.length(), out);
-                    }
-                } else if (getContentType(file).equals("application/octet-stream")) {
-                    // No page is requested, respond with the default page
-                    file = new File(root + "\\" + defaultPage);
-
-                    if (httpRequest.isUseChunked()) {
-                        sendChunkedResponse(200, "OK", getContentType(file), file, clientSocket.getOutputStream());
-                    } else {
-                        sendResponse(200, "OK", getContentType(file), file, out);
+                        //HEAD request
+                        outputHeaders(200, "OK", getContentType(file), (int)file.length(), out);
                     }
                 } else {
                     sendErrorResponse(404, "Not Found", out);
@@ -184,7 +182,7 @@ public class Server {
             sendResponse(statusCode, statusMessage, "text/plain", "", out);
         }
 
-        private void printHeaders(int statusCode, String statusMessage, String contentType, int contentLength, PrintWriter out) {
+        private void outputHeaders(int statusCode, String statusMessage, String contentType, int contentLength, PrintWriter out) {
             String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
             String contentTypeStr = "Content-Type: " + contentType;
             String contentLengthStr = "Content-Length: " + contentLength;
@@ -194,13 +192,13 @@ public class Server {
         }
         
         private void sendResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
-            printHeaders(statusCode, statusMessage, contentType, content.length(), out);
+            outputHeaders(statusCode, statusMessage, contentType, content.length(), out);
             out.println(content);
         }
 
         private void sendResponse(int statusCode, String statusMessage, String contentType, File file, PrintWriter out) throws IOException {
             try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
-                printHeaders(statusCode, statusMessage, contentType, (int)file.length(), out);
+                outputHeaders(statusCode, statusMessage, contentType, (int)file.length(), out);
                 byte[] buffer = new byte[1024];
                 int bytesRead;
 
@@ -245,9 +243,16 @@ public class Server {
         }
 
         private String getContentType(File file) {
-            // Implement logic to determine content type based on file extension
+            // Logic to determine content type based on file extension.
             String fileName = file.getName();
-            String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
+            String extension = "";
+            int dotIndex = fileName.lastIndexOf('.');
+
+            if (dotIndex != -1) {
+                extension = fileName.substring(dotIndex + 1).toLowerCase();
+            } else {
+                return null;
+            }
 
             switch (extension) {
                 case "html":
@@ -268,6 +273,7 @@ public class Server {
         }
 
         private boolean isPathWithinRoot(String filePath) throws IOException {
+            //Returns whether requested file is within root or not
             String canonicalFilePath = new File(filePath).getCanonicalPath();
             String canonicalRoot = new File(root).getCanonicalPath();
             return canonicalFilePath.startsWith(canonicalRoot);
