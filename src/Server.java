@@ -100,13 +100,13 @@ public class Server {
 
                 switch (httpRequest.getMethod()) {
                     case "GET":
-                        handleGetHeadRequest(true, httpRequest, out);
+                        handleGetPostHeadRequest(true, httpRequest, out);
                         break;
                     case "POST":
-                        handlePostRequest(httpRequest, out, in);
+                        handleGetPostHeadRequest(true, httpRequest, out);
                         break;
                     case "HEAD":
-                        handleGetHeadRequest(false, httpRequest, out);
+                        handleGetPostHeadRequest(false, httpRequest, out);
                         break;
                     // TODO: Trace
                     default:
@@ -117,7 +117,7 @@ public class Server {
             }
         }
 
-        private void handleGetHeadRequest(boolean isGET, HTTPRequest httpRequest, PrintWriter out) throws IOException {
+        private void handleGetPostHeadRequest(boolean isGetOrPost, HTTPRequest httpRequest, PrintWriter out) throws IOException {
             try {
                 String filePath = root + httpRequest.getPath();
 
@@ -127,6 +127,10 @@ public class Server {
                 }
 
                 File file = new File(filePath);
+                if (file.exists() && file.getName().equals("params_info.html") && isGetOrPost) {
+                    handleParamsInfo(httpRequest, out);
+                    return;
+                }
 
                 if (file.exists() && file.isDirectory()) {
                     // Request default page
@@ -134,12 +138,12 @@ public class Server {
                 }
 
                 if (file.exists() && !file.isDirectory()) {
-                    if (isGET) {
+                    if (isGetOrPost) {
                         //GET request
                         if (httpRequest.isUseChunked()) {
                             sendChunkedResponse(200, "OK", getContentType(file), file, clientSocket.getOutputStream());
                         } else {
-                            sendResponse(200, "OK", getContentType(file), file, out);
+                            sendFileResponse(200, "OK", getContentType(file), file, out);
                         } 
                     } else {
                         //HEAD request
@@ -153,33 +157,25 @@ public class Server {
             }
         }
 
+        private void handleParamsInfo(HTTPRequest httpRequest, PrintWriter out) {
+            Map<String, String> params = httpRequest.getParameters();
 
-        private void handlePostRequest(HTTPRequest httpRequest, PrintWriter out, BufferedReader in) throws IOException {
-            // Check if the requested page is /params_info.html
-            if ("/params_info.html".equals(httpRequest.getPath())) {
-                // Parse parameters from the POST request
-                Map<String, String> params = httpRequest.getParameters();
-
-                // Generate the HTML page with details about submitted parameters
-                StringBuilder response = new StringBuilder();
-                response.append("<html><body>");
-                response.append("<h1>Submitted Parameters:</h1>");
-                response.append("<ul>");
-                for (Map.Entry<String, String> entry : params.entrySet()) {
-                    response.append("<li>").append(entry.getKey()).append(": ").append(entry.getValue()).append("</li>");
-                }
-                response.append("</ul>");
-                response.append("</body></html>");
-
-                // Send the HTML response
-                sendResponse(200, "OK", "text/html", response.toString(), out);
-            } else {
-                handleGetHeadRequest(true, httpRequest, out);
+            // Generate the HTML page with details about submitted parameters
+            StringBuilder response = new StringBuilder();
+            response.append("<html><body>");
+            response.append("<h1>Submitted Parameters:</h1>");
+            response.append("<ul>");
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                response.append("<li>").append(entry.getKey()).append(": ").append(entry.getValue()).append("</li>");
             }
+            response.append("</ul>");
+            response.append("</body></html>");
+            // Send the HTML response
+            sendTextResponse(200, "OK", "text/html", response.toString(), out);
         }
 
         private void sendErrorResponse(int statusCode, String statusMessage, PrintWriter out) {
-            sendResponse(statusCode, statusMessage, "text/plain", "", out);
+            sendTextResponse(statusCode, statusMessage, "text/plain", "", out);
         }
 
         private void outputHeaders(int statusCode, String statusMessage, String contentType, int contentLength, PrintWriter out) {
@@ -191,12 +187,12 @@ public class Server {
             System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
         }
         
-        private void sendResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
+        private void sendTextResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
             outputHeaders(statusCode, statusMessage, contentType, content.length(), out);
             out.println(content);
         }
 
-        private void sendResponse(int statusCode, String statusMessage, String contentType, File file, PrintWriter out) throws IOException {
+        private void sendFileResponse(int statusCode, String statusMessage, String contentType, File file, PrintWriter out) throws IOException {
             try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
                 outputHeaders(statusCode, statusMessage, contentType, (int)file.length(), out);
                 byte[] buffer = new byte[1024];

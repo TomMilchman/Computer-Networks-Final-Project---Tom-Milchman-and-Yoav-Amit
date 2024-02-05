@@ -1,5 +1,8 @@
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -41,6 +44,7 @@ public class HTTPRequest {
 
     private void parseHeaders(BufferedReader in) throws IOException {
         String line;
+        
         while ((line = in.readLine()) != null && !line.isEmpty()) {
             if (line.startsWith("Content-Length:")) {
                 contentLength = Integer.parseInt(line.substring("Content-Length:".length()).trim());
@@ -77,15 +81,19 @@ public class HTTPRequest {
 
     private void parseParameters(String requestBody) {
         String[] paramPairs = requestBody.split("&");
-
+    
         for (String pair : paramPairs) {
             String[] keyValue = pair.split("=");
             if (keyValue.length == 2) {
-                parameters.put(keyValue[0], keyValue[1]);
+                try {
+                    String decodedKey = URLDecoder.decode(keyValue[0], StandardCharsets.UTF_8.name());
+                    String decodedValue = URLDecoder.decode(keyValue[1], StandardCharsets.UTF_8.name());
+                    parameters.put(decodedKey, decodedValue);
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                }
             }
         }
-
-        System.out.println("Received parameters: " + parameters.toString());
     }
 
     public String getMethod() {
