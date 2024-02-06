@@ -38,8 +38,10 @@ public class Server {
                     Socket clientSocket = serverSocket.accept();
                     Runnable clientHandler = new ClientHandler(clientSocket);
                     
-                    // Submit the client handler to the thread pool
-                    threadPool.submit(clientHandler);
+                    // Submit the client handler to the thread pool and synchronize it
+                    synchronized (threadPool) {
+                        threadPool.submit(clientHandler);
+                    }
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -117,7 +119,7 @@ public class Server {
             }
         }
 
-        private void handleGetPostHeadRequest(boolean isGetOrPost, HTTPRequest httpRequest, PrintWriter out) throws IOException {
+        private synchronized void handleGetPostHeadRequest(boolean isGetOrPost, HTTPRequest httpRequest, PrintWriter out) throws IOException {
             try {
                 String filePath = root + httpRequest.getPath();
 
@@ -165,9 +167,11 @@ public class Server {
             response.append("<html><body>");
             response.append("<h1>Submitted Parameters:</h1>");
             response.append("<ul>");
+
             for (Map.Entry<String, String> entry : params.entrySet()) {
                 response.append("<li>").append(entry.getKey()).append(": ").append(entry.getValue()).append("</li>");
             }
+            
             response.append("</ul>");
             response.append("</body></html>");
             // Send the HTML response
@@ -265,6 +269,7 @@ public class Server {
             //Returns whether requested file is within root or not
             String canonicalFilePath = new File(filePath).getCanonicalPath();
             String canonicalRoot = new File(root).getCanonicalPath();
+
             return canonicalFilePath.startsWith(canonicalRoot);
         }
     }
