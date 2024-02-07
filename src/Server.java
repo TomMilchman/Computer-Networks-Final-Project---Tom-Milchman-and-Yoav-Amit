@@ -1,17 +1,8 @@
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.OutputStream;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.io.InputStreamReader;
+import java.io.*;
+import java.net.*;
 
 public class Server {
     private static int port;
@@ -26,8 +17,12 @@ public class Server {
     private static void startServer() {
         try {
             loadConfig("Computer Networks Final Project - Tom Milchman and Yoav Amit/config.ini");
-            System.out.println("Successfully loaded config.ini: port: "+port+" "+
-            "max threads: "+maxThreads+" root: "+root+" default page:"+defaultPage);
+            if (port != 0 && maxThreads != 0 && root != null && defaultPage != null) {
+                System.out.println("Successfully loaded config.ini: port: "+port+" "+
+                "max threads: "+maxThreads+" root: "+root+" default page:"+defaultPage);
+            } else {
+                throw new Exception("config.ini parameters error");
+            }
             
             ExecutorService threadPool = Executors.newFixedThreadPool(maxThreads);
         
@@ -50,33 +45,47 @@ public class Server {
                 threadPool.shutdown();
             }
         } catch (Exception e) {
-            e.printStackTrace();
-           //TODO: Handle server shutdown 
+            System.out.println("Error encountered running server, shutting down. " + e.getMessage());
         }
     }
 
-    private static void loadConfig(String configFile) throws IOException {
+    private static void loadConfig(String configFile) throws Exception {
         try (BufferedReader reader = new BufferedReader(new FileReader(configFile))) {
             String line;
 
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split("=");
+                
                 if (parts.length == 2) {
                     String key = parts[0].trim();
                     String value = parts[1].trim();
                     switch (key) {
                         case "port":
-                            port = Integer.parseInt(value);
-                            break;
+                            if (Integer.parseInt(value) > 0 && Integer.parseInt(value) <= 65535) {
+                                port = Integer.parseInt(value);
+                                break;
+                            }
+
+                            throw new Exception("Invalid Port number.");
                         case "root":
-                            root = value;
-                            break;
+                            File file = new File(value);
+
+                            if (file.exists() && file.isDirectory()) {
+                                root = value;
+                                break;
+                            }
+                            
+                            throw new Exception("Root folder does not exist.");
                         case "defaultPage":
                             defaultPage = value;
                             break;
                         case "maxThreads":
-                            maxThreads = Integer.parseInt(value);
-                            break;
+                            if (Integer.parseInt(value) > 0) {
+                                maxThreads = Integer.parseInt(value);
+                                break;
+                            }
+
+                            throw new Exception("Invalid max threads number.");
                     }
                 }
             }
@@ -94,7 +103,6 @@ public class Server {
         public void run() {
             try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                 PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
-
                 String requestLine = in.readLine();
                 System.out.println("Received request: " + requestLine);
 
@@ -102,8 +110,6 @@ public class Server {
 
                 switch (httpRequest.getMethod()) {
                     case "GET":
-                        handleGetPostHeadRequest(true, httpRequest, out);
-                        break;
                     case "POST":
                         handleGetPostHeadRequest(true, httpRequest, out);
                         break;
@@ -114,8 +120,8 @@ public class Server {
                     default:
                         sendErrorResponse(501, "Not Implemented", out);
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
+            } catch (Exception e) {
+                System.out.println("Encountered a problem for the request: " + e.getMessage());
             }
         }
 
@@ -124,7 +130,7 @@ public class Server {
                 String filePath = root + httpRequest.getPath();
 
                 if (!isPathWithinRoot(filePath)) {
-                    sendErrorResponse(403, "Forbidden", out);
+                    sendErrorResponse(400, "Bad Request", out);
                     return;
                 }
 
@@ -143,9 +149,9 @@ public class Server {
                     if (isGetOrPost) {
                         //GET request
                         if (httpRequest.isUseChunked()) {
-                            sendChunkedResponse(200, "OK", getContentType(file), file, clientSocket.getOutputStream());
+                            sendChunkedResponse(getContentType(file), file, clientSocket.getOutputStream());
                         } else {
-                            sendFileResponse(200, "OK", getContentType(file), file, out);
+                            sendFileResponse(getContentType(file), file, out);
                         } 
                     } else {
                         //HEAD request
@@ -183,22 +189,30 @@ public class Server {
         }
 
         private void outputHeaders(int statusCode, String statusMessage, String contentType, int contentLength, PrintWriter out) {
-            String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
-            String contentTypeStr = "Content-Type: " + contentType;
-            String contentLengthStr = "Content-Length: " + contentLength;
+            try {
+                String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
+                String contentTypeStr = "Content-Type: " + contentType;
+                String contentLengthStr = "Content-Length: " + contentLength;
 
-            out.println(headerStr +"\r\n"+ contentTypeStr +"\r\n"+ contentLengthStr +"\r\n");
-            System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
+                out.println(headerStr +"\r\n"+ contentTypeStr +"\r\n"+ contentLengthStr +"\r\n");
+                System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
+            } catch (Exception e) {
+                sendErrorResponse(500, "Internal Server Error", out);
+            }
         }
         
         private void sendTextResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
-            outputHeaders(statusCode, statusMessage, contentType, content.length(), out);
-            out.println(content);
+            try {
+                outputHeaders(statusCode, statusMessage, contentType, content.length(), out);
+                out.println(content);
+            } catch (Exception e) {
+                sendErrorResponse(500, "Internal Server Error", out);
+            }
         }
 
-        private void sendFileResponse(int statusCode, String statusMessage, String contentType, File file, PrintWriter out) throws IOException {
+        private void sendFileResponse(String contentType, File file, PrintWriter out) throws IOException {
             try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
-                outputHeaders(statusCode, statusMessage, contentType, (int)file.length(), out);
+                outputHeaders(200, "OK", contentType, (int)file.length(), out);
                 byte[] buffer = new byte[1024];
                 int bytesRead;
 
@@ -206,13 +220,14 @@ public class Server {
                     clientSocket.getOutputStream().write(buffer, 0, bytesRead);
                 }
             } catch (Exception e) {
+                sendErrorResponse(500, "Internal Server Error", out);
                 e.printStackTrace();
             }
         }
 
-        private void sendChunkedResponse(int statusCode, String statusMessage, String contentType, File file, OutputStream outputStream) throws IOException {
+        private void sendChunkedResponse(String contentType, File file, OutputStream outputStream) throws IOException {
             try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
-                String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
+                String headerStr = "HTTP/1.1 " + 200 + " " + "OK";
                 String contentTypeStr = "Content-Type: " + contentType;
         
                 // Send the response headers
@@ -238,6 +253,7 @@ public class Server {
                 // Write the final chunk of size 0 to signal the end
                 outputStream.write("0\r\n\r\n".getBytes());
             } catch (IOException e) {
+                sendErrorResponse(500, "Internal Server Error", new PrintWriter(outputStream));
                 e.printStackTrace();
             }
         }
