@@ -21,7 +21,7 @@ public class Server {
                 System.out.println("Successfully loaded config.ini: port: "+port+" "+
                 "max threads: "+maxThreads+" root: "+root+" default page:"+defaultPage);
             } else {
-                throw new Exception("config.ini parameters error");
+                throw new Exception("Missing config.ini parameters.");
             }
             
             ExecutorService threadPool = Executors.newFixedThreadPool(maxThreads);
@@ -33,10 +33,8 @@ public class Server {
                     Socket clientSocket = serverSocket.accept();
                     Runnable clientHandler = new ClientHandler(clientSocket);
                     
-                    // Submit the client handler to the thread pool and synchronize it
-                    synchronized (threadPool) {
-                        threadPool.submit(clientHandler);
-                    }
+                    // Submit the client handler to the thread pool
+                    threadPool.submit(clientHandler);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -111,12 +109,14 @@ public class Server {
                 switch (httpRequest.getMethod()) {
                     case "GET":
                     case "POST":
-                        handleGetPostHeadRequest(true, httpRequest, out);
+                        handleGetPostHeadRequests(true, httpRequest, out);
                         break;
                     case "HEAD":
-                        handleGetPostHeadRequest(false, httpRequest, out);
+                        handleGetPostHeadRequests(false, httpRequest, out);
                         break;
-                    // TODO: Trace
+                    case "TRACE":
+                        handleTraceRequest(httpRequest, out);
+                        break;
                     default:
                         sendErrorResponse(501, "Not Implemented", out);
                 }
@@ -125,16 +125,18 @@ public class Server {
             }
         }
 
-        private synchronized void handleGetPostHeadRequest(boolean isGetOrPost, HTTPRequest httpRequest, PrintWriter out) throws IOException {
-            try {
-                String filePath = root + httpRequest.getPath();
+        private String cleanPath(String path) {
+            // Remove any occurrences of "/../" in the path
+            return path.replaceAll("/\\.\\./", "/");
+        }
 
-                if (!isPathWithinRoot(filePath)) {
-                    sendErrorResponse(400, "Bad Request", out);
-                    return;
-                }
+        private synchronized void handleGetPostHeadRequests(boolean isGetOrPost, HTTPRequest httpRequest, PrintWriter out) throws IOException {
+            try {
+                String cleanPath = cleanPath(httpRequest.getPath());
+                String filePath = root + cleanPath;
 
                 File file = new File(filePath);
+                
                 if (file.exists() && file.getName().equals("params_info.html") && isGetOrPost) {
                     handleParamsInfo(httpRequest, out);
                     return;
@@ -147,7 +149,7 @@ public class Server {
 
                 if (file.exists() && !file.isDirectory()) {
                     if (isGetOrPost) {
-                        //GET request
+                        //GET and POST requests
                         if (httpRequest.isUseChunked()) {
                             sendChunkedResponse(getContentType(file), file, clientSocket.getOutputStream());
                         } else {
@@ -161,27 +163,47 @@ public class Server {
                     sendErrorResponse(404, "Not Found", out);
                 }
             } catch (Exception e) {
+                sendErrorResponse(500, "Internal Server Error", out);
                 e.getStackTrace();
             }
         }
 
-        private void handleParamsInfo(HTTPRequest httpRequest, PrintWriter out) {
-            Map<String, String> params = httpRequest.getParameters();
-
-            // Generate the HTML page with details about submitted parameters
-            StringBuilder response = new StringBuilder();
-            response.append("<html><body>");
-            response.append("<h1>Submitted Parameters:</h1>");
-            response.append("<ul>");
-
-            for (Map.Entry<String, String> entry : params.entrySet()) {
-                response.append("<li>").append(entry.getKey()).append(": ").append(entry.getValue()).append("</li>");
+        private void handleTraceRequest(HTTPRequest httpRequest, PrintWriter out) {
+            try {
+                // Echo back the received request to the client
+                String content = httpRequest.getMethod() + " " + httpRequest.getPath() + " HTTP/1.1\r\n"
+                                + "Host: " + clientSocket.getInetAddress().getHostAddress() + "\r\n"
+                                + "\r\n";
+                
+                sendTextResponse(200, "OK", "message/http", content, out);
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendErrorResponse(500, "Internal Server Error", out);
             }
-            
-            response.append("</ul>");
-            response.append("</body></html>");
-            // Send the HTML response
-            sendTextResponse(200, "OK", "text/html", response.toString(), out);
+        }
+
+        private void handleParamsInfo(HTTPRequest httpRequest, PrintWriter out) {
+            try {
+                Map<String, String> params = httpRequest.getParameters();
+
+                // Generate the HTML page with details about submitted parameters
+                StringBuilder response = new StringBuilder();
+                response.append("<html><body>");
+                response.append("<h1>Submitted Parameters:</h1>");
+                response.append("<ul>");
+
+                for (Map.Entry<String, String> entry : params.entrySet()) {
+                    response.append("<li>").append(entry.getKey()).append(": ").append(entry.getValue()).append("</li>");
+                }
+                
+                response.append("</ul>");
+                response.append("</body></html>");
+                // Send the HTML response
+                sendTextResponse(200, "OK", "text/html", response.toString(), out);
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendErrorResponse(500, "Internal Server Error", out);
+            }
         }
 
         private void sendErrorResponse(int statusCode, String statusMessage, PrintWriter out) {
@@ -197,7 +219,7 @@ public class Server {
                 out.println(headerStr +"\r\n"+ contentTypeStr +"\r\n"+ contentLengthStr +"\r\n");
                 System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
             } catch (Exception e) {
-                sendErrorResponse(500, "Internal Server Error", out);
+                sendErrorResponse(400, "Bad Request", out);
             }
         }
         
@@ -206,7 +228,8 @@ public class Server {
                 outputHeaders(statusCode, statusMessage, contentType, content.length(), out);
                 out.println(content);
             } catch (Exception e) {
-                sendErrorResponse(500, "Internal Server Error", out);
+                sendErrorResponse(400, "Bad Request", out);
+                e.printStackTrace();
             }
         }
 
@@ -220,7 +243,7 @@ public class Server {
                     clientSocket.getOutputStream().write(buffer, 0, bytesRead);
                 }
             } catch (Exception e) {
-                sendErrorResponse(500, "Internal Server Error", out);
+                sendErrorResponse(400, "Bad Request", out);
                 e.printStackTrace();
             }
         }
@@ -253,7 +276,7 @@ public class Server {
                 // Write the final chunk of size 0 to signal the end
                 outputStream.write("0\r\n\r\n".getBytes());
             } catch (IOException e) {
-                sendErrorResponse(500, "Internal Server Error", new PrintWriter(outputStream));
+                sendErrorResponse(400, "Bad Request", new PrintWriter(outputStream));
                 e.printStackTrace();
             }
         }
@@ -279,14 +302,6 @@ public class Server {
                 default:
                     return "application/octet-stream";
             }
-        }
-
-        private boolean isPathWithinRoot(String filePath) throws IOException {
-            //Returns whether requested file is within root or not
-            String canonicalFilePath = new File(filePath).getCanonicalPath();
-            String canonicalRoot = new File(root).getCanonicalPath();
-
-            return canonicalFilePath.startsWith(canonicalRoot);
         }
     }
 }

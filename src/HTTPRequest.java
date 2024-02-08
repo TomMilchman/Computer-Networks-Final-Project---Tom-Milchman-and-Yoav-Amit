@@ -30,6 +30,7 @@ public class HTTPRequest {
             String fullPath = requestParts[1];
 
             int queryIndex = fullPath.indexOf('?');
+            
             if (queryIndex != -1) {
                 path = fullPath.substring(0, queryIndex);
                 String queryString = fullPath.substring(queryIndex + 1);
@@ -38,7 +39,7 @@ public class HTTPRequest {
                 path = fullPath;
             }
 
-            isImage = isImagePathImage(path);
+            isImage = isPathImage(path);
         }
     }
 
@@ -67,7 +68,7 @@ public class HTTPRequest {
         }
     }
 
-    private boolean isImagePathImage(String path) {
+    private boolean isPathImage(String path) {
         String[] imageExtensions = {".jpg", ".bmp", ".gif", ".png"};
 
         for (String extension : imageExtensions) {
@@ -84,6 +85,7 @@ public class HTTPRequest {
     
         for (String pair : paramPairs) {
             String[] keyValue = pair.split("=");
+
             if (keyValue.length == 2) {
                 try {
                     String decodedKey = URLDecoder.decode(keyValue[0], StandardCharsets.UTF_8.name());
