@@ -16,7 +16,8 @@ public class Server {
 
     private static void startServer() {
         try {
-            loadConfig("Computer Networks Final Project - Tom Milchman and Yoav Amit/config.ini");
+            loadConfig("../config.ini");
+            
             if (port != 0 && maxThreads != 0 && root != null && defaultPage != null) {
                 System.out.println("Successfully loaded config.ini: port: "+port+" "+
                 "max threads: "+maxThreads+" root: "+root+" default page:"+defaultPage);
@@ -31,10 +32,12 @@ public class Server {
 
                 while (true) {
                     Socket clientSocket = serverSocket.accept();
-                    Runnable clientHandler = new ClientHandler(clientSocket);
+                    Thread clientHandler = new ClientHandler(clientSocket);
                     
-                    // Submit the client handler to the thread pool
-                    threadPool.submit(clientHandler);
+                    synchronized(threadPool) {
+                        // Submit the client handler to the thread pool
+                        threadPool.submit(clientHandler);
+                    }
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -57,6 +60,7 @@ public class Server {
                 if (parts.length == 2) {
                     String key = parts[0].trim();
                     String value = parts[1].trim();
+
                     switch (key) {
                         case "port":
                             if (Integer.parseInt(value) > 0 && Integer.parseInt(value) <= 65535) {
@@ -168,7 +172,7 @@ public class Server {
             }
         }
 
-        private void handleTraceRequest(HTTPRequest httpRequest, PrintWriter out) {
+        private synchronized void handleTraceRequest(HTTPRequest httpRequest, PrintWriter out) {
             try {
                 // Echo back the received request to the client
                 String content = httpRequest.getMethod() + " " + httpRequest.getPath() + " HTTP/1.1\r\n"
