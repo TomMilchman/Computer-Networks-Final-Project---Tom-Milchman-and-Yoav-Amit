@@ -1,9 +1,11 @@
 import java.io.*;
 import java.net.*;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class ClientHandler extends Thread {
     private static final String CRLF = "\r\n";
+    private static final ReentrantLock lock = new ReentrantLock();
 
     private Socket clientSocket;
 
@@ -14,11 +16,10 @@ public class ClientHandler extends Thread {
     @Override
     public void run() {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-             PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
+            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
             String requestLine = in.readLine();
-            System.out.println("Received request: " + requestLine);
-
             HTTPRequest httpRequest = new HTTPRequest(requestLine, in);
+            printRequestHeaders(httpRequest, requestLine);
 
             switch (httpRequest.getMethod()) {
                 case "GET":
@@ -39,12 +40,33 @@ public class ClientHandler extends Thread {
         }
     }
 
+    private void printRequestHeaders(HTTPRequest httpRequest, String requestLine) {
+        lock.lock();
+
+        try {
+            System.out.println("--------------------------------------------------");
+            System.out.println("Received request:");
+            System.out.println(requestLine);
+            System.out.println("Method: " + httpRequest.getMethod());
+            System.out.println("Path: " + httpRequest.getPath());
+            System.out.println("Content-Length: " + httpRequest.getContentLength());
+            System.out.println("Referer: " + httpRequest.getReferer());
+            System.out.println("User-Agent: " + httpRequest.getUserAgent());
+            System.out.println("Use Chunked: " + httpRequest.isUseChunked());
+            System.out.println("--------------------------------------------------");
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private String cleanPath(String path) {
         // Remove any occurrences of "/../" in the path
         return path.replaceAll("/\\.\\./", "/");
     }
 
-    private synchronized void handleGetPostHeadRequests(boolean isGetOrPost, HTTPRequest httpRequest, PrintWriter out) throws IOException {
+    private void handleGetPostHeadRequests(boolean isGetOrPost, HTTPRequest httpRequest, PrintWriter out) throws IOException {
+        lock.lock();
+        
         try {
             String cleanPath = cleanPath(httpRequest.getPath());
             String filePath = Server.getRoot() + cleanPath;
@@ -69,7 +91,7 @@ public class ClientHandler extends Thread {
                         sendFileResponse(getContentType(file), file, out);
                     }
                 } else {
-                    outputHeaders(200, "OK", getContentType(file), (int) file.length(), out);
+                    outputResponseHeaders(200, "OK", getContentType(file), (int) file.length(), out);
                 }
             } else {
                 sendErrorResponse(404, "Not Found", out);
@@ -77,10 +99,14 @@ public class ClientHandler extends Thread {
         } catch (Exception e) {
             sendErrorResponse(500, "Internal Server Error", out);
             e.getStackTrace();
+        } finally {
+            lock.unlock();
         }
     }
 
-    private synchronized void handleTraceRequest(HTTPRequest httpRequest, PrintWriter out) {
+    private void handleTraceRequest(HTTPRequest httpRequest, PrintWriter out) {
+        lock.lock();
+        
         try {
             String content = httpRequest.getMethod() + " " + httpRequest.getPath() + " HTTP/1.1" + CRLF
                     + "Host: " + clientSocket.getInetAddress().getHostAddress() + CRLF
@@ -90,10 +116,14 @@ public class ClientHandler extends Thread {
         } catch (Exception e) {
             e.printStackTrace();
             sendErrorResponse(500, "Internal Server Error", out);
+        } finally {
+            lock.unlock();
         }
     }
 
     private void handleParamsInfo(HTTPRequest httpRequest, PrintWriter out) {
+        lock.lock();
+        
         try {
             Map<String, String> params = httpRequest.getParameters();
 
@@ -116,6 +146,8 @@ public class ClientHandler extends Thread {
             }
         } catch (Exception e) {
             sendErrorResponse(500, "Internal Server Error", out);
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -123,31 +155,43 @@ public class ClientHandler extends Thread {
         sendTextResponse(statusCode, statusMessage, "text/plain", "", out);
     }
 
-    private void outputHeaders(int statusCode, String statusMessage, String contentType, int contentLength, PrintWriter out) {
+    private void outputResponseHeaders(int statusCode, String statusMessage, String contentType, int contentLength, PrintWriter out) {
+        lock.lock();
+        
         try {
             String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
             String contentTypeStr = "Content-Type: " + contentType;
             String contentLengthStr = "Content-Length: " + contentLength;
 
             out.println(headerStr + CRLF + contentTypeStr + CRLF + contentLengthStr + CRLF);
+            System.out.println("--------------------------------------------------");
             System.out.println("Sent response: " + headerStr + " " + contentTypeStr + " " + contentLengthStr);
+            System.out.println("--------------------------------------------------");
         } catch (Exception e) {
             sendErrorResponse(400, "Bad Request", out);
+        } finally {
+            lock.unlock();
         }
     }
 
     private void sendTextResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
+        lock.lock();
+        
         try {
-            outputHeaders(statusCode, statusMessage, contentType, content.length(), out);
+            outputResponseHeaders(statusCode, statusMessage, contentType, content.length(), out);
             out.println(content);
         } catch (Exception e) {
             sendErrorResponse(400, "Bad Request", out);
+        } finally {
+            lock.unlock();
         }
     }
 
     private void sendFileResponse(String contentType, File file, PrintWriter out) throws IOException {
+        lock.lock();
+        
         try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
-            outputHeaders(200, "OK", contentType, (int) file.length(), out);
+            outputResponseHeaders(200, "OK", contentType, (int) file.length(), out);
             byte[] buffer = new byte[1024];
             int bytesRead;
 
@@ -156,10 +200,14 @@ public class ClientHandler extends Thread {
             }
         } catch (Exception e) {
             sendErrorResponse(400, "Bad Request", out);
+        } finally {
+            lock.unlock();
         }
     }
 
     private void sendChunkedFileResponse(String contentType, File file, OutputStream outputStream) throws IOException {
+        lock.lock();
+        
         try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
             String headerStr = "HTTP/1.1 " + 200 + " " + "OK";
             String contentTypeStr = "Content-Type: " + contentType;
@@ -167,7 +215,9 @@ public class ClientHandler extends Thread {
             // Send the response headers
             String responseHeaders = headerStr + CRLF + "Transfer-Encoding: chunked" + CRLF + contentTypeStr + CRLF + CRLF;
             outputStream.write(responseHeaders.getBytes());
+            System.out.println("--------------------------------------------------");
             System.out.println("Sent response: " + headerStr + " Transfer-Encoding: chunked " + contentTypeStr);
+            System.out.println("--------------------------------------------------");
 
             byte[] buffer = new byte[1024];
             int bytesRead;
@@ -179,10 +229,14 @@ public class ClientHandler extends Thread {
             sendFinalChunk(outputStream);
         } catch (IOException e) {
             sendErrorResponse(400, "Bad Request", new PrintWriter(outputStream));
+        } finally {
+            lock.unlock();
         }
     }
 
     private void sendChunkedTextResponse(int statusCode, String statusMessage, String contentType, String content, OutputStream outputStream) {
+        lock.lock();
+        
         try {
             String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
             String contentTypeStr = "Content-Type: " + contentType;
@@ -192,11 +246,15 @@ public class ClientHandler extends Thread {
             // Write the content in chunks
             byte[] chunkBuffer = content.getBytes();
             sendChunk(outputStream, chunkBuffer, chunkBuffer.length);
+            System.out.println("--------------------------------------------------");
             System.out.println("Sent response: " + headerStr + " Transfer-Encoding: chunked " + contentTypeStr);
+            System.out.println("--------------------------------------------------");
 
             sendFinalChunk(outputStream);
         } catch (IOException e) {
             sendErrorResponse(500, "Internal Server Error", new PrintWriter(new OutputStreamWriter(outputStream)));
+        } finally {
+            lock.unlock();
         }
     }
 
