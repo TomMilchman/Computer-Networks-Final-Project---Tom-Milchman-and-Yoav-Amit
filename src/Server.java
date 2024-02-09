@@ -15,7 +15,7 @@ public class Server {
 
     private static void startServer() {
         try {
-            //loadConfig("Computer Networks Final Project - Tom Milchman and Yoav Amit/config.ini");
+            // loadConfig("Computer Networks Final Project - Tom Milchman and Yoav Amit/config.ini");
             loadConfig("../config.ini");
 
             if (port != 0 && maxThreads != 0 && root != null && defaultPage != null) {
@@ -60,6 +60,7 @@ public class Server {
                 if (parts.length == 2) {
                     String key = parts[0].trim();
                     String value = parts[1].trim();
+                    value = value.replaceFirst("^~", System.getProperty("user.home"));
 
                     switch (key) {
                         case "port":

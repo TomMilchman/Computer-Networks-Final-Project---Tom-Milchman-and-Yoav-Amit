@@ -46,14 +46,14 @@ public class HTTPRequest {
     private void parseHeaders(BufferedReader in) throws IOException {
         String line;
         
-        while ((line = in.readLine()) != null && !line.isEmpty()) {
-            if (line.startsWith("Content-Length:")) {
+        while ((line = in.readLine().toLowerCase()) != null && !line.isEmpty()) {
+            if (line.startsWith("Content-Length:".toLowerCase())) {
                 contentLength = Integer.parseInt(line.substring("Content-Length:".length()).trim());
-            } else if (line.startsWith("Referer:")) {
+            } else if (line.startsWith("Referer:".toLowerCase())) {
                 referer = line.substring("Referer:".length()).trim();
-            } else if (line.startsWith("User-Agent:")) {
+            } else if (line.startsWith("User-Agent:".toLowerCase())) {
                 userAgent = line.substring("User-Agent:".length()).trim();
-            } else if (line.startsWith("Transfer-Encoding: chunked")) {
+            } else if (line.startsWith("Chunked:".toLowerCase()) && line.contains("yes")) {
                 useChunked = true;
             }
         }

@@ -1,8 +1,10 @@
-import java.util.Map;
 import java.io.*;
 import java.net.*;
+import java.util.Map;
 
 public class ClientHandler extends Thread {
+    private static final String CRLF = "\r\n";
+
     private Socket clientSocket;
 
     public ClientHandler(Socket clientSocket) {
@@ -12,7 +14,7 @@ public class ClientHandler extends Thread {
     @Override
     public void run() {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
+             PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
             String requestLine = in.readLine();
             System.out.println("Received request: " + requestLine);
 
@@ -48,7 +50,7 @@ public class ClientHandler extends Thread {
             String filePath = Server.getRoot() + cleanPath;
 
             File file = new File(filePath);
-            
+
             if (file.exists() && file.getName().equals("params_info.html") && isGetOrPost) {
                 handleParamsInfo(httpRequest, out);
                 return;
@@ -56,20 +58,18 @@ public class ClientHandler extends Thread {
 
             if (file.exists() && file.isDirectory()) {
                 // Request default page
-                file = new File(filePath + "\\" + Server.getDefaultPage());
+                file = new File(filePath + Server.getDefaultPage());
             }
 
             if (file.exists() && !file.isDirectory()) {
                 if (isGetOrPost) {
-                    //GET and POST requests
                     if (httpRequest.isUseChunked()) {
-                        sendChunkedResponse(getContentType(file), file, clientSocket.getOutputStream());
+                        sendChunkedFileResponse(getContentType(file), file, clientSocket.getOutputStream());
                     } else {
                         sendFileResponse(getContentType(file), file, out);
-                    } 
+                    }
                 } else {
-                    //HEAD request
-                    outputHeaders(200, "OK", getContentType(file), (int)file.length(), out);
+                    outputHeaders(200, "OK", getContentType(file), (int) file.length(), out);
                 }
             } else {
                 sendErrorResponse(404, "Not Found", out);
@@ -82,11 +82,10 @@ public class ClientHandler extends Thread {
 
     private synchronized void handleTraceRequest(HTTPRequest httpRequest, PrintWriter out) {
         try {
-            // Echo back the received request to the client
-            String content = httpRequest.getMethod() + " " + httpRequest.getPath() + " HTTP/1.1\r\n"
-                            + "Host: " + clientSocket.getInetAddress().getHostAddress() + "\r\n"
-                            + "\r\n";
-            
+            String content = httpRequest.getMethod() + " " + httpRequest.getPath() + " HTTP/1.1" + CRLF
+                    + "Host: " + clientSocket.getInetAddress().getHostAddress() + CRLF
+                    + CRLF;
+
             sendTextResponse(200, "OK", "message/http", content, out);
         } catch (Exception e) {
             e.printStackTrace();
@@ -98,7 +97,6 @@ public class ClientHandler extends Thread {
         try {
             Map<String, String> params = httpRequest.getParameters();
 
-            // Generate the HTML page with details about submitted parameters
             StringBuilder response = new StringBuilder();
             response.append("<html><body>");
             response.append("<h1>Submitted Parameters:</h1>");
@@ -107,13 +105,16 @@ public class ClientHandler extends Thread {
             for (Map.Entry<String, String> entry : params.entrySet()) {
                 response.append("<li>").append(entry.getKey()).append(": ").append(entry.getValue()).append("</li>");
             }
-            
+
             response.append("</ul>");
             response.append("</body></html>");
-            // Send the HTML response
-            sendTextResponse(200, "OK", "text/html", response.toString(), out);
+
+            if (httpRequest.isUseChunked()) {
+                sendChunkedTextResponse(200, "OK", "text/html", response.toString(), clientSocket.getOutputStream());
+            } else {
+                sendTextResponse(200, "OK", "text/html", response.toString(), out);
+            }
         } catch (Exception e) {
-            e.printStackTrace();
             sendErrorResponse(500, "Internal Server Error", out);
         }
     }
@@ -128,26 +129,25 @@ public class ClientHandler extends Thread {
             String contentTypeStr = "Content-Type: " + contentType;
             String contentLengthStr = "Content-Length: " + contentLength;
 
-            out.println(headerStr +"\r\n"+ contentTypeStr +"\r\n"+ contentLengthStr +"\r\n");
-            System.out.println("Sent response: " + headerStr +" "+ contentTypeStr +" "+ contentLengthStr);
+            out.println(headerStr + CRLF + contentTypeStr + CRLF + contentLengthStr + CRLF);
+            System.out.println("Sent response: " + headerStr + " " + contentTypeStr + " " + contentLengthStr);
         } catch (Exception e) {
             sendErrorResponse(400, "Bad Request", out);
         }
     }
-    
+
     private void sendTextResponse(int statusCode, String statusMessage, String contentType, String content, PrintWriter out) {
         try {
             outputHeaders(statusCode, statusMessage, contentType, content.length(), out);
             out.println(content);
         } catch (Exception e) {
             sendErrorResponse(400, "Bad Request", out);
-            e.printStackTrace();
         }
     }
 
     private void sendFileResponse(String contentType, File file, PrintWriter out) throws IOException {
         try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
-            outputHeaders(200, "OK", contentType, (int)file.length(), out);
+            outputHeaders(200, "OK", contentType, (int) file.length(), out);
             byte[] buffer = new byte[1024];
             int bytesRead;
 
@@ -156,45 +156,68 @@ public class ClientHandler extends Thread {
             }
         } catch (Exception e) {
             sendErrorResponse(400, "Bad Request", out);
-            e.printStackTrace();
         }
     }
 
-    private void sendChunkedResponse(String contentType, File file, OutputStream outputStream) throws IOException {
+    private void sendChunkedFileResponse(String contentType, File file, OutputStream outputStream) throws IOException {
         try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
             String headerStr = "HTTP/1.1 " + 200 + " " + "OK";
             String contentTypeStr = "Content-Type: " + contentType;
-    
+
             // Send the response headers
-            String responseHeaders = headerStr + "\r\nTransfer-Encoding: chunked\r\n" + contentTypeStr + "\r\n\r\n";
+            String responseHeaders = headerStr + CRLF + "Transfer-Encoding: chunked" + CRLF + contentTypeStr + CRLF + CRLF;
             outputStream.write(responseHeaders.getBytes());
             System.out.println("Sent response: " + headerStr + " Transfer-Encoding: chunked " + contentTypeStr);
-    
+
             byte[] buffer = new byte[1024];
             int bytesRead;
-    
+
             while ((bytesRead = fileStream.read(buffer)) != -1) {
-                // Write the chunk size in hexadecimal followed by CRLF
-                String chunkHeader = Integer.toHexString(bytesRead) + "\r\n";
-                outputStream.write(chunkHeader.getBytes());
-    
-                // Write the actual chunk
-                outputStream.write(buffer, 0, bytesRead);
-    
-                // Write CRLF after each chunk
-                outputStream.write("\r\n".getBytes());
+                sendChunk(outputStream, buffer, bytesRead);
             }
-    
-            // Write the final chunk of size 0 to signal the end
-            outputStream.write("0\r\n\r\n".getBytes());
+
+            sendFinalChunk(outputStream);
         } catch (IOException e) {
             sendErrorResponse(400, "Bad Request", new PrintWriter(outputStream));
-            e.printStackTrace();
         }
     }
 
+    private void sendChunkedTextResponse(int statusCode, String statusMessage, String contentType, String content, OutputStream outputStream) {
+        try {
+            String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
+            String contentTypeStr = "Content-Type: " + contentType;
+            String responseHeaders = headerStr + CRLF + "Transfer-Encoding: chunked" + CRLF + contentTypeStr + CRLF + CRLF;
+            outputStream.write(responseHeaders.getBytes());
+
+            // Write the content in chunks
+            byte[] chunkBuffer = content.getBytes();
+            sendChunk(outputStream, chunkBuffer, chunkBuffer.length);
+            System.out.println("Sent response: " + headerStr + " Transfer-Encoding: chunked " + contentTypeStr);
+
+            sendFinalChunk(outputStream);
+        } catch (IOException e) {
+            sendErrorResponse(500, "Internal Server Error", new PrintWriter(new OutputStreamWriter(outputStream)));
+        }
+    }
+
+    private void sendChunk(OutputStream outputStream, byte[] buffer, int bytesRead) throws IOException {
+        // Write the chunk size in hexadecimal followed by CRLF
+        String chunkHeader = Integer.toHexString(bytesRead) + CRLF;
+        outputStream.write(chunkHeader.getBytes());
+
+        // Write the actual chunk
+        outputStream.write(buffer, 0, bytesRead);
+
+        // Write CRLF after each chunk
+        outputStream.write(CRLF.getBytes());
+    }
+
+    private void sendFinalChunk(OutputStream outputStream) throws IOException {
+        // Write the final chunk of size 0 to signal the end
+        outputStream.write(("0" + CRLF + CRLF).getBytes());
+    }
+
     private String getContentType(File file) {
-        // Logic to determine content type based on file extension.
         String fileName = file.getName();
         String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
 
