@@ -11,14 +11,12 @@ public class HTTPRequest {
     private String path;
     private boolean isImage;
     private int contentLength;
-    private String referer;
-    private String userAgent;
     private boolean useChunked;
-    private Map<String, String> otherHeaders;
+    private Map<String, String> headers;
     private Map<String, String> parameters;
 
     public HTTPRequest(String requestLine, BufferedReader in) throws IOException {
-        otherHeaders = new HashMap<>();
+        headers = new HashMap<>();
         parameters = new HashMap<>();
         parseRequestLine(requestLine);
         parseHeaders(in);
@@ -60,14 +58,10 @@ public class HTTPRequest {
 
             if (key.equals("content-length")) {
                 contentLength = Integer.parseInt(value);
-            } else if (key.equals("referer")) {
-                referer = value;
-            } else if (key.equals("user-agent")) {
-                userAgent = value;
             } else if (key.equals("chunked") && value.equals("yes")) {
                 useChunked = true;
             } else {
-                otherHeaders.put(key, value);
+                headers.put(key, value);
             }
         }
 
@@ -111,6 +105,20 @@ public class HTTPRequest {
         }
     }
 
+    public String headersAsString() {
+        //Return the headers of the request as a string.
+        StringBuilder sb = new StringBuilder();
+        sb.append("content-length: " + contentLength + "\r\n");
+
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            sb.append(key +": "+ value + "\r\n");
+        }
+
+        return sb.toString();
+    }
+
     public String getMethod() {
         return method;
     }
@@ -127,14 +135,6 @@ public class HTTPRequest {
         return contentLength;
     }
 
-    public String getReferer() {
-        return referer;
-    }
-
-    public String getUserAgent() {
-        return userAgent;
-    }
-
     public Map<String, String> getParameters() {
         return parameters;
     }
@@ -143,7 +143,7 @@ public class HTTPRequest {
         return useChunked;
     }
 
-    public Map<String, String> getOtherHeaders() {
-        return otherHeaders;
+    public Map<String, String> getHeaders() {
+        return headers;
     }
 }

@@ -47,22 +47,7 @@ public class ClientHandler extends Thread {
             System.out.println("--------------------------------------------------");
             System.out.println("Received request:");
             System.out.println(requestLine);
-            System.out.println("method: " + httpRequest.getMethod());
-            System.out.println("path: " + httpRequest.getPath());
-            System.out.println("content-length: " + httpRequest.getContentLength());
-            System.out.println("referer: " + httpRequest.getReferer());
-            System.out.println("user-agent: " + httpRequest.getUserAgent());
-            System.out.println("use chunked: " + httpRequest.isUseChunked());
-
-            Map <String, String> otherHeaders = httpRequest.getOtherHeaders();
-
-            for (Map.Entry<String, String> entry : otherHeaders.entrySet()) {
-                String key = entry.getKey();
-                String value = entry.getValue();
-
-                System.out.println(key + ": " + value);
-            }
-            
+            System.out.println(httpRequest.headersAsString());
             System.out.println("--------------------------------------------------");
         } finally {
             lock.unlock();
@@ -113,11 +98,14 @@ public class ClientHandler extends Thread {
         lock.lock();
         
         try {
-            String content = httpRequest.getMethod() + " " + httpRequest.getPath() + " HTTP/1.1" + CRLF
-                    + "Host: " + clientSocket.getInetAddress().getHostAddress() + CRLF
-                    + CRLF;
-
-            sendTextResponse(200, "OK", "message/http", content, out);
+            String requestMessage = httpRequest.getMethod() + " " + httpRequest.getPath() + " HTTP/1.1" + CRLF
+                    + httpRequest.headersAsString();
+            
+            if (httpRequest.isUseChunked()) {
+                sendChunkedTextResponse("message/http", requestMessage, clientSocket.getOutputStream());
+            } else {
+                sendTextResponse(200, "OK", "message/http", requestMessage, out);
+            }
         } catch (Exception e) {
             e.printStackTrace();
             sendErrorResponse(500, "Internal Server Error", out);
@@ -145,7 +133,7 @@ public class ClientHandler extends Thread {
             response.append("</body></html>");
 
             if (httpRequest.isUseChunked()) {
-                sendChunkedTextResponse(200, "OK", "text/html", response.toString(), clientSocket.getOutputStream());
+                sendChunkedTextResponse("text/html", response.toString(), clientSocket.getOutputStream());
             } else {
                 sendTextResponse(200, "OK", "text/html", response.toString(), out);
             }
@@ -240,11 +228,11 @@ public class ClientHandler extends Thread {
         }
     }
 
-    private void sendChunkedTextResponse(int statusCode, String statusMessage, String contentType, String content, OutputStream outputStream) {
+    private void sendChunkedTextResponse(String contentType, String content, OutputStream outputStream) {
         lock.lock();
         
         try {
-            String requestLineStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
+            String requestLineStr = "HTTP/1.1 " + 200 + " " + "OK";
             String contentTypeStr = "Content-Type: " + contentType;
             String responseHeaders = requestLineStr + CRLF + "Transfer-Encoding: chunked" + CRLF + contentTypeStr + CRLF + CRLF;
             outputStream.write(responseHeaders.getBytes());
