@@ -9,7 +9,6 @@ import java.util.Map;
 public class HTTPRequest {
     private String method;
     private String path;
-    private boolean isImage;
     private int contentLength;
     private boolean useChunked;
     private Map<String, String> headers;
@@ -38,8 +37,6 @@ public class HTTPRequest {
             } else {
                 path = fullPath;
             }
-
-            isImage = isPathImage(path);
         }
     }
 
@@ -60,9 +57,9 @@ public class HTTPRequest {
                 contentLength = Integer.parseInt(value);
             } else if (key.equals("chunked") && value.equals("yes")) {
                 useChunked = true;
-            } else {
-                headers.put(key, value);
-            }
+            } 
+            
+            headers.put(key, value);
         }
 
         // POST request's content body parameters
@@ -73,18 +70,6 @@ public class HTTPRequest {
             requestBody.append(buffer);
             parseParameters(requestBody.toString());
         }
-    }
-
-    private boolean isPathImage(String path) {
-        String[] imageExtensions = {".jpg", ".bmp", ".gif", ".png"};
-
-        for (String extension : imageExtensions) {
-            if (path.toLowerCase().endsWith(extension)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private void parseParameters(String requestBody) {
@@ -108,7 +93,6 @@ public class HTTPRequest {
     public String headersAsString() {
         //Return the headers of the request as a string.
         StringBuilder sb = new StringBuilder();
-        sb.append("content-length: " + contentLength + "\r\n");
 
         for (Map.Entry<String, String> entry : headers.entrySet()) {
             String key = entry.getKey();
@@ -127,10 +111,6 @@ public class HTTPRequest {
         return path;
     }
 
-    public boolean isImage() {
-        return isImage;
-    }
-
     public int getContentLength() {
         return contentLength;
     }
@@ -141,9 +121,5 @@ public class HTTPRequest {
 
     public boolean isUseChunked() {
         return useChunked;
-    }
-
-    public Map<String, String> getHeaders() {
-        return headers;
     }
 }
