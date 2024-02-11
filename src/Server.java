@@ -40,7 +40,7 @@ public class Server {
                     }
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                System.out.println("Error encountered running server, shutting down. " + e.getMessage());
             } finally {
                 // Shutdown the thread pool when the server is done
                 threadPool.shutdown();
