@@ -74,6 +74,7 @@ public class ClientHandler extends Thread {
             File file = new File(filePath);
 
             if (file.exists() && file.getName().equals("params_info.html") && isGetOrPost) {
+                //Return the inserted parameters to the user in an html page 
                 handleParamsInfo(httpRequest, out);
                 return;
             }
@@ -98,7 +99,7 @@ public class ClientHandler extends Thread {
             }
         } catch (Exception e) {
             sendErrorResponse(500, "Internal Server Error", out);
-            e.getStackTrace();
+            e.printStackTrace();
         } finally {
             lock.unlock();
         }

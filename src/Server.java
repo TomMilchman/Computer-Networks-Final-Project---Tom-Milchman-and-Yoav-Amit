@@ -9,7 +9,7 @@ public class Server {
     private static String root;
     private static String defaultPage;
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         startServer();
     }
 
@@ -20,7 +20,7 @@ public class Server {
 
             if (port != 0 && maxThreads != 0 && root != null && defaultPage != null) {
                 System.out.println("Successfully loaded config.ini: port: "+port+" "+
-                "max threads: "+maxThreads+" root: "+root+" default page:"+defaultPage);
+                "max threads: "+maxThreads+" root: "+root+" default page: "+defaultPage);
             } else {
                 throw new Exception("Missing config.ini parameters.");
             }
