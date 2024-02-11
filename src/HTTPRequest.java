@@ -14,9 +14,11 @@ public class HTTPRequest {
     private String referer;
     private String userAgent;
     private boolean useChunked;
+    private Map<String, String> otherHeaders;
     private Map<String, String> parameters;
 
     public HTTPRequest(String requestLine, BufferedReader in) throws IOException {
+        otherHeaders = new HashMap<>();
         parameters = new HashMap<>();
         parseRequestLine(requestLine);
         parseHeaders(in);
@@ -27,7 +29,7 @@ public class HTTPRequest {
 
         if (requestParts.length == 3) {
             method = requestParts[0];
-            String fullPath = requestParts[1];
+            String fullPath = cleanPath(requestParts[1]);
 
             int queryIndex = fullPath.indexOf('?');
             
@@ -43,18 +45,29 @@ public class HTTPRequest {
         }
     }
 
+    private String cleanPath(String path) {
+        // Remove any occurrences of "/../" in the path
+        return path.replaceAll("/\\.\\./", "/");
+    }
+
     private void parseHeaders(BufferedReader in) throws IOException {
         String line;
         
         while ((line = in.readLine().toLowerCase()) != null && !line.isEmpty()) {
-            if (line.startsWith("Content-Length:".toLowerCase())) {
-                contentLength = Integer.parseInt(line.substring("Content-Length:".length()).trim());
-            } else if (line.startsWith("Referer:".toLowerCase())) {
-                referer = line.substring("Referer:".length()).trim();
-            } else if (line.startsWith("User-Agent:".toLowerCase())) {
-                userAgent = line.substring("User-Agent:".length()).trim();
-            } else if (line.startsWith("Chunked:".toLowerCase()) && line.contains("yes")) {
+            String[] keyValue = line.split(":", 2);
+            String key = keyValue[0].trim();
+            String value = keyValue[1].trim();
+
+            if (key.equals("content-length")) {
+                contentLength = Integer.parseInt(value);
+            } else if (key.equals("referer")) {
+                referer = value;
+            } else if (key.equals("user-agent")) {
+                userAgent = value;
+            } else if (key.equals("chunked") && value.equals("yes")) {
                 useChunked = true;
+            } else {
+                otherHeaders.put(key, value);
             }
         }
 
@@ -128,5 +141,9 @@ public class HTTPRequest {
 
     public boolean isUseChunked() {
         return useChunked;
+    }
+
+    public Map<String, String> getOtherHeaders() {
+        return otherHeaders;
     }
 }

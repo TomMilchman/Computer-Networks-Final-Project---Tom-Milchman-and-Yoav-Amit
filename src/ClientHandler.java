@@ -47,29 +47,33 @@ public class ClientHandler extends Thread {
             System.out.println("--------------------------------------------------");
             System.out.println("Received request:");
             System.out.println(requestLine);
-            System.out.println("Method: " + httpRequest.getMethod());
-            System.out.println("Path: " + httpRequest.getPath());
-            System.out.println("Content-Length: " + httpRequest.getContentLength());
-            System.out.println("Referer: " + httpRequest.getReferer());
-            System.out.println("User-Agent: " + httpRequest.getUserAgent());
-            System.out.println("Use Chunked: " + httpRequest.isUseChunked());
+            System.out.println("method: " + httpRequest.getMethod());
+            System.out.println("path: " + httpRequest.getPath());
+            System.out.println("content-length: " + httpRequest.getContentLength());
+            System.out.println("referer: " + httpRequest.getReferer());
+            System.out.println("user-agent: " + httpRequest.getUserAgent());
+            System.out.println("use chunked: " + httpRequest.isUseChunked());
+
+            Map <String, String> otherHeaders = httpRequest.getOtherHeaders();
+
+            for (Map.Entry<String, String> entry : otherHeaders.entrySet()) {
+                String key = entry.getKey();
+                String value = entry.getValue();
+
+                System.out.println(key + ": " + value);
+            }
+            
             System.out.println("--------------------------------------------------");
         } finally {
             lock.unlock();
         }
     }
 
-    private String cleanPath(String path) {
-        // Remove any occurrences of "/../" in the path
-        return path.replaceAll("/\\.\\./", "/");
-    }
-
     private void handleGetPostHeadRequests(boolean isGetOrPost, HTTPRequest httpRequest, PrintWriter out) throws IOException {
         lock.lock();
         
         try {
-            String cleanPath = cleanPath(httpRequest.getPath());
-            String filePath = Server.getRoot() + cleanPath;
+            String filePath = Server.getRoot() + httpRequest.getPath();
 
             File file = new File(filePath);
 
@@ -160,13 +164,14 @@ public class ClientHandler extends Thread {
         lock.lock();
         
         try {
-            String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
+            String requestLineStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
             String contentTypeStr = "Content-Type: " + contentType;
             String contentLengthStr = "Content-Length: " + contentLength;
+            String response = requestLineStr + CRLF + contentTypeStr + CRLF + contentLengthStr;
 
-            out.println(headerStr + CRLF + contentTypeStr + CRLF + contentLengthStr + CRLF);
+            out.println(response + CRLF);
             System.out.println("--------------------------------------------------");
-            System.out.println("Sent response: " + headerStr + " " + contentTypeStr + " " + contentLengthStr);
+            System.out.println("Sent response: " + CRLF + response);
             System.out.println("--------------------------------------------------");
         } catch (Exception e) {
             sendErrorResponse(400, "Bad Request", out);
@@ -210,14 +215,14 @@ public class ClientHandler extends Thread {
         lock.lock();
         
         try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
-            String headerStr = "HTTP/1.1 " + 200 + " " + "OK";
+            String requestLineStr = "HTTP/1.1 " + 200 + " " + "OK";
             String contentTypeStr = "Content-Type: " + contentType;
 
             // Send the response headers
-            String responseHeaders = headerStr + CRLF + "Transfer-Encoding: chunked" + CRLF + contentTypeStr + CRLF + CRLF;
+            String responseHeaders = requestLineStr + CRLF + "Transfer-Encoding: chunked" + CRLF + contentTypeStr + CRLF + CRLF;
             outputStream.write(responseHeaders.getBytes());
             System.out.println("--------------------------------------------------");
-            System.out.println("Sent response: " + headerStr + " Transfer-Encoding: chunked " + contentTypeStr);
+            System.out.println("Sent response: " + CRLF + requestLineStr + CRLF + "Transfer-Encoding: chunked " + CRLF + contentTypeStr);
             System.out.println("--------------------------------------------------");
 
             byte[] buffer = new byte[1024];
@@ -239,16 +244,16 @@ public class ClientHandler extends Thread {
         lock.lock();
         
         try {
-            String headerStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
+            String requestLineStr = "HTTP/1.1 " + statusCode + " " + statusMessage;
             String contentTypeStr = "Content-Type: " + contentType;
-            String responseHeaders = headerStr + CRLF + "Transfer-Encoding: chunked" + CRLF + contentTypeStr + CRLF + CRLF;
+            String responseHeaders = requestLineStr + CRLF + "Transfer-Encoding: chunked" + CRLF + contentTypeStr + CRLF + CRLF;
             outputStream.write(responseHeaders.getBytes());
 
             // Write the content in chunks
             byte[] chunkBuffer = content.getBytes();
             sendChunk(outputStream, chunkBuffer, chunkBuffer.length);
             System.out.println("--------------------------------------------------");
-            System.out.println("Sent response: " + headerStr + " Transfer-Encoding: chunked " + contentTypeStr);
+            System.out.println("Sent response: " + CRLF + requestLineStr + CRLF + "Transfer-Encoding: chunked " + CRLF + contentTypeStr);
             System.out.println("--------------------------------------------------");
 
             sendFinalChunk(outputStream);
