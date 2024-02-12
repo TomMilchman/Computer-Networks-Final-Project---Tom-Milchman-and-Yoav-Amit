@@ -14,4 +14,8 @@ HTTPRequest: This class parses an http request and saves the information in its 
 request body (in the case the method is "POST") and save them in a hashmap for later use.
 
 Design:
-//ADD
+We decided to split everything into 3 different class for modularity. The Server class just handles running the server, ClientHandler handles the requests
+received from each client and the responses and HTTPRequest is used for easily parsing the requests. In the ClientHandler's run method we determine the type
+of request that needs to be handled and handle it accordingly. If the request is of type GET or POST we check first if the file requested is param_info.html,
+if it is, we return an HTML page with all of the given parameters inside. If it isn't, we check if the file even exists. If not, we try to obtain the default
+page. If the file exists, we return it according to if chunked encoding is requested in the HTTP request or not.
