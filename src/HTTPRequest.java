@@ -49,6 +49,7 @@ public class HTTPRequest {
         String line;
         
         while ((line = in.readLine().toLowerCase()) != null && !line.isEmpty()) {
+            //Save all headers to the headers map
             String[] keyValue = line.split(":", 2);
             String key = keyValue[0].trim();
             String value = keyValue[1].trim();

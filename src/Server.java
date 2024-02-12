@@ -15,7 +15,6 @@ public class Server {
 
     private static void startServer() {
         try {
-            // loadConfig("Computer Networks Final Project - Tom Milchman and Yoav Amit/config.ini");
             loadConfig("../config.ini");
 
             if (port != 0 && maxThreads != 0 && root != null && defaultPage != null) {
