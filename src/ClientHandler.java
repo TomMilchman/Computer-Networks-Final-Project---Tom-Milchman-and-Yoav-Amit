@@ -72,9 +72,9 @@ public class ClientHandler extends Thread {
             if (file.exists() && !file.isDirectory()) {
                 if (isGetOrPost) {
                     if (httpRequest.isUseChunked()) {
-                        sendChunkedFileResponse(getContentType(file), file, clientSocket.getOutputStream());
+                        sendChunkedFileResponse(getContentType(file), file, out);
                     } else {
-                        sendFileResponse(getContentType(file), file, out);
+                        sendFileResponse(file, getContentType(file), out);
                     }
                 } else {
                     outputResponseHeaders(200, "OK", getContentType(file), (int) file.length(), out);
@@ -94,7 +94,7 @@ public class ClientHandler extends Thread {
                     + httpRequest.headersAsString();
             
             if (httpRequest.isUseChunked()) {
-                sendChunkedTextResponse("message/http", requestMessage, clientSocket.getOutputStream());
+                sendChunkedTextResponse("message/http", requestMessage, out);
             } else {
                 sendTextResponse(200, "OK", "message/http", requestMessage, out);
             }
@@ -121,7 +121,7 @@ public class ClientHandler extends Thread {
             response.append("</body></html>");
 
             if (httpRequest.isUseChunked()) {
-                sendChunkedTextResponse("text/html", response.toString(), clientSocket.getOutputStream());
+                sendChunkedTextResponse("text/html", response.toString(), out);
             } else {
                 sendTextResponse(200, "OK", "text/html", response.toString(), out);
             }
@@ -163,22 +163,39 @@ public class ClientHandler extends Thread {
         }
     }
 
-    private void sendFileResponse(String contentType, File file, PrintWriter out) throws IOException {
-        try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
-            outputResponseHeaders(200, "OK", contentType, (int) file.length(), out);
-            byte[] buffer = new byte[1024];
-            int bytesRead;
-
-            while ((bytesRead = fileStream.read(buffer)) != -1) {
-                clientSocket.getOutputStream().write(buffer, 0, bytesRead);
+    private void sendFileResponse(File file, String contentType, PrintWriter out) {
+        try {
+            byte[] fileContent = readFile(file);
+            OutputStream outputStream = clientSocket.getOutputStream();
+    
+            if (fileContent != null) {
+                outputResponseHeaders(200, "OK", contentType, fileContent.length, out);
+                outputStream.write(fileContent);
+            } else {
+                sendErrorResponse(400, "Bad Request", out);
             }
         } catch (Exception e) {
-            sendErrorResponse(400, "Bad Request", out);
+            sendErrorResponse(500, "Internal Server Error", out);
         }
     }
+    
 
-    private void sendChunkedFileResponse(String contentType, File file, OutputStream outputStream) throws IOException {
+    private byte[] readFile(File file) throws Exception {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] bFile = new byte[(int) file.length()];
+
+            // Read until the end of the stream.
+            while (fis.available() != 0) {
+                fis.read(bFile, 0, bFile.length);
+            }
+
+            return bFile;
+        } 
+    }
+
+    private void sendChunkedFileResponse(String contentType, File file, PrintWriter out) throws IOException {
         try (BufferedInputStream fileStream = new BufferedInputStream(new FileInputStream(file))) {
+            OutputStream outputStream = clientSocket.getOutputStream();
             String requestLineStr = "HTTP/1.1 " + 200 + " " + "OK";
             String contentTypeStr = "Content-Type: " + contentType;
 
@@ -196,12 +213,13 @@ public class ClientHandler extends Thread {
 
             sendFinalChunk(outputStream);
         } catch (IOException e) {
-            sendErrorResponse(400, "Bad Request", new PrintWriter(outputStream));
+            sendErrorResponse(400, "Bad Request", out);
         }
     }
 
-    private void sendChunkedTextResponse(String contentType, String content, OutputStream outputStream) {
+    private void sendChunkedTextResponse(String contentType, String content, PrintWriter out) {
         try {
+            OutputStream outputStream = clientSocket.getOutputStream();
             String requestLineStr = "HTTP/1.1 " + 200 + " " + "OK";
             String contentTypeStr = "Content-Type: " + contentType;
             String responseHeaders = requestLineStr + CRLF + "Transfer-Encoding: chunked" + CRLF + contentTypeStr + CRLF + CRLF;
@@ -214,7 +232,7 @@ public class ClientHandler extends Thread {
 
             sendFinalChunk(outputStream);
         } catch (IOException e) {
-            sendErrorResponse(500, "Internal Server Error", new PrintWriter(new OutputStreamWriter(outputStream)));
+            sendErrorResponse(400, "Bad Request", out);
         }
     }
 
